@@ -46,6 +46,16 @@ ESCAPE_MARGIN = 40
 # Timing
 FRAME_DELAY_MS = 16  # ~60 fps
 
+# Warped grid (visual aid only)
+SHOW_GRID = True
+GRID_COLOR = "#3c424d"      # faint slate gray
+GRID_SPACING = 50
+GRID_HALF_WIDTH = SCREEN_WIDTH // 2
+GRID_HALF_HEIGHT = SCREEN_HEIGHT // 2
+GRID_STEPS = 140            # more steps = smoother curves
+GRID_WARP_STRENGTH = 9000.0
+GRID_WARP_POWER = 1.55
+GRID_EXCLUSION_RADIUS = SCHWARZSCHILD_RADIUS + 8
 
 # ============================================================
 # GLOBAL STATE
@@ -152,6 +162,9 @@ def draw_filled_circle(pen, x, y, r, fillcolor, outlinecolor=None, pensize=2):
 def draw_static_scene():
     static_pen.clear()
 
+    # Background warped grid first
+    draw_warped_grid()
+
     # Photon sphere ring
     draw_circle_outline(
         static_pen,
@@ -184,6 +197,71 @@ def draw_ui():
         f"photon sphere = {PHOTON_SPHERE_RADIUS:.1f}",
         font=("Arial", 12, "normal")
     )
+
+def warp_point(x, y):
+    """
+    Purely visual radial warp used for background grid lines.
+    This is not a physical embedding diagram or exact GR transform.
+    """
+    dx = x - BH_X
+    dy = y - BH_Y
+    r = norm(dx, dy)
+
+    if r < GRID_EXCLUSION_RADIUS:
+        # Avoid ugly numerical blow-up near the hole
+        return x, y
+
+    # Radial inward visual warp
+    ux, uy = dx / (r + EPS), dy / (r + EPS)
+    warp = GRID_WARP_STRENGTH / ((r ** GRID_WARP_POWER) + EPS)
+
+    # Clamp so the grid stays subtle and doesn't fold too hard
+    warp = min(warp, 18.0)
+
+    return x - ux * warp, y - uy * warp
+
+
+def draw_warped_polyline(points, color, pensize=1):
+    if not points:
+        return
+
+    static_pen.pencolor(color)
+    static_pen.pensize(pensize)
+    static_pen.penup()
+
+    x0, y0 = points[0]
+    static_pen.goto(x0, y0)
+    static_pen.pendown()
+
+    for x, y in points[1:]:
+        static_pen.goto(x, y)
+
+    static_pen.penup()
+
+
+def draw_warped_grid():
+    if not SHOW_GRID:
+        return
+
+    # Vertical lines
+    x_values = range(-GRID_HALF_WIDTH, GRID_HALF_WIDTH + 1, GRID_SPACING)
+    for x in x_values:
+        pts = []
+        for i in range(GRID_STEPS + 1):
+            y = -GRID_HALF_HEIGHT + i * (2 * GRID_HALF_HEIGHT / GRID_STEPS)
+            wx, wy = warp_point(x, y)
+            pts.append((wx, wy))
+        draw_warped_polyline(pts, GRID_COLOR, pensize=1)
+
+    # Horizontal lines
+    y_values = range(-GRID_HALF_HEIGHT, GRID_HALF_HEIGHT + 1, GRID_SPACING)
+    for y in y_values:
+        pts = []
+        for i in range(GRID_STEPS + 1):
+            x = -GRID_HALF_WIDTH + i * (2 * GRID_HALF_WIDTH / GRID_STEPS)
+            wx, wy = warp_point(x, y)
+            pts.append((wx, wy))
+        draw_warped_polyline(pts, GRID_COLOR, pensize=1)
 
 
 # ============================================================
